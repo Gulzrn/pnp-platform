@@ -1,0 +1,55 @@
+
+[functions.saathi-chat]
+enabled = true
+verify_jwt = false
+import_map = "./functions/saathi-chat/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/saathi-chat/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/saathi-chat/*.html" ]
+
+[functions.complaint-writer]
+enabled = true
+verify_jwt = false
+import_map = "./functions/complaint-writer/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/complaint-writer/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/complaint-writer/*.html" ]
+
+[functions.fake-job-detector]
+enabled = true
+verify_jwt = false
+import_map = "./functions/fake-job-detector/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/fake-job-detector/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/fake-job-detector/*.html" ]
+
+[functions.cv-analyzer]
+enabled = true
+verify_jwt = false
+import_map = "./functions/cv-analyzer/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/cv-analyzer/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/cv-analyzer/*.html" ]
+
+[functions.idea-analyzer]
+enabled = true
+verify_jwt = false
+import_map = "./functions/idea-analyzer/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/idea-analyzer/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/idea-analyzer/*.html" ]
