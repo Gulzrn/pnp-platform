@@ -42,3 +42,14 @@ entrypoint = "./functions/cv-analyzer/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/cv-analyzer/*.html" ]
+
+[functions.idea-analyzer]
+enabled = true
+verify_jwt = false
+import_map = "./functions/idea-analyzer/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/idea-analyzer/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/idea-analyzer/*.html" ]
