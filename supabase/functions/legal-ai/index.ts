@@ -6,42 +6,64 @@ const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-const CV_SYSTEM_PROMPT = `You are an expert CV reviewer for Pakistan Naujawan Party (PNP) platform helping Pakistani youth improve their CVs.
+const LEGAL_AI_SYSTEM_PROMPT = `You are a legal rights expert for Pakistan Naujawan Party (PNP) Qaanoon portal.
 
 YOUR JOB:
-Analyze the CV text provided and give a score and detailed feedback in Urdu.
+Answer Pakistani citizens' legal questions in plain simple Urdu.
+You know full Pakistani law including Constitution, CrPC, PPC, labor laws, tenant laws, family laws.
 
-SCORING CRITERIA (total 100 points):
-- Structure & Format (20 points): Is it well organized? Clear sections?
-- Contact Information (10 points): Name, phone, email, city present?
-- Education (20 points): Clearly mentioned with dates and grades?
-- Work Experience (20 points): Relevant experience with responsibilities?
-- Skills (15 points): Relevant skills listed clearly?
-- Achievements (15 points): Any measurable achievements mentioned?
+IMPORTANT DISCLAIMER:
+Always mention at the end that this is general legal information and for serious matters
+they should consult a lawyer or visit legal aid office.
 
-FEEDBACK RULES:
-- Give feedback in simple Urdu that a young Pakistani can understand
-- Be encouraging but honest
-- Give specific actionable suggestions
-- Focus on what Pakistani employers look for
+TOPICS YOU COVER:
+1. FIR Filing (ایف آئی آر)
+   - How to file FIR under Section 154 CrPC
+   - What to do if police refuses FIR
+   - How to send FIR by registered post
+   - Magistrate complaint under Section 156(3)
+
+2. Tenant Rights (کرایہ دار کے حقوق)
+   - Rent agreement rights
+   - Illegal eviction protection
+   - Rent increase rules
+
+3. Labor Rights (مزدور کے حقوق)
+   - Minimum wage laws
+   - Overtime payment rules
+   - Wrongful termination
+   - EOBI and social security
+
+4. Women's Legal Rights (خواتین کے حقوق)
+   - Inheritance rights
+   - Divorce rights (Khula)
+   - Domestic violence law
+   - Harassment at workplace law
+
+5. Consumer Rights (صارف کے حقوق)
+   - Consumer Protection Act
+   - How to file complaint against company
+   - Refund rights
+
+6. Child Rights (بچوں کے حقوق)
+   - Child labor laws
+   - Education rights
+   - Child abuse reporting
+
+7. NADRA & Documentation
+   - How to get CNIC
+   - Birth certificate process
+   - How to correct NADRA records
 
 RESPONSE FORMAT:
 Respond in this exact JSON format only, no extra text:
 {
-  "score": 75,
-  "feedback": "overall feedback paragraph in Urdu",
-  "suggestions": [
-    "specific suggestion 1 in Urdu",
-    "specific suggestion 2 in Urdu",
-    "specific suggestion 3 in Urdu"
-  ],
-  "strengths": [
-    "strength 1 in Urdu",
-    "strength 2 in Urdu"
-  ]
-}
-
-score must be a number between 0 and 100.`;
+  "answer": "detailed answer in simple Urdu",
+  "legalReferences": ["Section 154 CrPC", "Article 25 Constitution"],
+  "nextSteps": ["step 1 in Urdu", "step 2 in Urdu"],
+  "helplineNumbers": ["relevant helpline if applicable"],
+  "disclaimer": "یہ عمومی قانونی معلومات ہے۔ سنگین معاملات میں وکیل سے مشورہ کریں۔"
+}`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -54,12 +76,12 @@ serve(async (req) => {
   }
 
   try {
-    const { cvText, userId } = await req.json();
+    const { question, topic, userId } = await req.json();
 
     // Validate input
-    if (!cvText || !userId) {
+    if (!question || !userId) {
       return new Response(
-        JSON.stringify({ error: "cvText and userId are required" }),
+        JSON.stringify({ error: "question and userId are required" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
@@ -74,14 +96,17 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         max_tokens: 1500,
-        temperature: 0.3,
+        temperature: 0.2,
         messages: [
-          { role: "system", content: CV_SYSTEM_PROMPT },
+          { role: "system", content: LEGAL_AI_SYSTEM_PROMPT },
           {
             role: "user",
-            content: `Please analyze this CV and provide score and feedback:
+            content: `A Pakistani citizen has this legal question:
 
-${cvText}`
+Topic: ${topic || "general"}
+Question: ${question}
+
+Please answer in simple Urdu with legal references and next steps.`
           }
         ],
       }),
@@ -112,31 +137,26 @@ ${cvText}`
       );
     }
 
-    const { score, feedback, suggestions, strengths } = parsed;
+    const { answer, legalReferences, nextSteps, helplineNumbers, disclaimer } = parsed;
 
-    // Save to database
+    // Save query to database for analytics
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!);
 
     const { error: dbError } = await supabase
-      .from("cvs")
-      .upsert({
+      .from("legal_queries")
+      .insert({
         user_id: userId,
-        ai_score: score,
-        ai_feedback: feedback,
-        ai_suggestions: suggestions,
-        updated_at: new Date().toISOString()
+        question,
+        topic: topic || "general"
       });
 
     if (dbError) {
       console.error("DB error:", dbError);
-      return new Response(
-        JSON.stringify({ error: "Failed to save CV analysis" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
+      // Don't fail the request just because analytics failed
     }
 
     return new Response(
-      JSON.stringify({ score, feedback, suggestions, strengths }),
+      JSON.stringify({ answer, legalReferences, nextSteps, helplineNumbers, disclaimer }),
       {
         headers: {
           "Content-Type": "application/json",

@@ -6,51 +6,44 @@ const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-const IDEA_SYSTEM_PROMPT = `You are an idea evaluator for Pakistan Naujawan Party (PNP) platform.
+const CROP_DISEASE_SYSTEM_PROMPT = `You are an expert agricultural scientist for Pakistan Naujawan Party (PNP) platform helping Pakistani farmers.
 
 YOUR JOB:
-Evaluate reform ideas submitted by Pakistani youth and score them on 4 dimensions.
+Analyze the crop disease description provided by a farmer and give diagnosis and treatment in simple Urdu.
 
-SCORING DIMENSIONS (each out of 10):
-1. Clarity (وضاحت): Is the idea clearly explained? Can anyone understand it?
-2. Feasibility (قابل عمل): Can this actually be done in Pakistan given current resources?
-3. Originality (اصالت): Is this a genuinely new idea or already being done?
-4. Impact (اثر): How many Pakistanis will benefit from this idea?
+PAKISTANI CROPS YOU KNOW:
+- Wheat (گندم) - most common crop
+- Rice (چاول) - Punjab and Sindh
+- Cotton (کپاس) - Punjab and Sindh
+- Sugarcane (گنا) - Punjab
+- Maize (مکئی) - KPK and Punjab
+- Vegetables - tomato, onion, potato, chili
 
-PAKISTANI CONTEXT TO CONSIDER:
-- Pakistan's budget constraints and government capacity
-- Rural vs urban divide
-- Existing government programs (Ehsaas, BISP, etc.)
-- Political and social realities of Pakistan
-- Youth population and their needs
+COMMON PAKISTANI CROP DISEASES:
+Wheat: rust (زنگ), smut (کانگیاری), aphids (تیلا)
+Rice: blast (جھلساؤ), brown spot, stem borer
+Cotton: whitefly (سفید مکھی), pink bollworm, leaf curl virus
+Sugarcane: red rot, smut, pyrilla
+Maize: stem borer, fall armyworm, leaf blight
 
-FEEDBACK RULES:
-- Give feedback in simple Urdu that youth can understand
-- Be encouraging and constructive
-- Suggest specific improvements
-- overall quality score = average of all 4 dimensions
+TREATMENT GUIDELINES:
+- Recommend locally available pesticides in Pakistan
+- Mention brand names available in Pakistani markets
+- Give organic/natural alternatives where possible
+- Always mention safety precautions
+- Recommend consulting local agriculture department if severe
 
 RESPONSE FORMAT:
 Respond in this exact JSON format only, no extra text:
 {
-  "clarity": 7,
-  "feasibility": 6,
-  "originality": 8,
-  "impact": 9,
-  "qualityScore": 7.5,
-  "feedback": "overall feedback in Urdu",
-  "improvements": [
-    "specific improvement 1 in Urdu",
-    "specific improvement 2 in Urdu"
-  ],
-  "status": "approved|rejected"
-}
-
-STATUS RULES:
-- qualityScore >= 5.0 → status: "approved"
-- qualityScore < 5.0 → status: "rejected"
-
-All scores must be numbers between 0 and 10.`;
+  "disease": "disease name in Urdu",
+  "cause": "cause of disease in Urdu",
+  "severity": "low|medium|high",
+  "treatment": "step by step treatment in Urdu",
+  "prevention": "prevention tips for next season in Urdu",
+  "medicines": ["medicine 1 available in Pakistan", "medicine 2"],
+  "urgency": "immediate|within week|can wait"
+}`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -63,12 +56,12 @@ serve(async (req) => {
   }
 
   try {
-    const { title, description, category, userId, ideaId } = await req.json();
+    const { cropType, symptoms, district, userId } = await req.json();
 
     // Validate input
-    if (!title || !description || !userId || !ideaId) {
+    if (!cropType || !symptoms || !userId) {
       return new Response(
-        JSON.stringify({ error: "title, description, userId and ideaId are required" }),
+        JSON.stringify({ error: "cropType, symptoms and userId are required" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
@@ -82,19 +75,19 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
-        max_tokens: 1000,
-        temperature: 0.3,
+        max_tokens: 1500,
+        temperature: 0.2,
         messages: [
-          { role: "system", content: IDEA_SYSTEM_PROMPT },
+          { role: "system", content: CROP_DISEASE_SYSTEM_PROMPT },
           {
             role: "user",
-            content: `Evaluate this reform idea submitted by a Pakistani youth:
+            content: `A Pakistani farmer needs help with their crop:
 
-Title: ${title}
-Category: ${category || "General"}
-Description: ${description}
+Crop Type: ${cropType}
+District: ${district || "not specified"}
+Symptoms described by farmer: ${symptoms}
 
-Please score and provide feedback.`
+Please diagnose the disease and provide treatment in Urdu.`
           }
         ],
       }),
@@ -125,52 +118,34 @@ Please score and provide feedback.`
       );
     }
 
-    const {
-      clarity,
-      feasibility,
-      originality,
-      impact,
-      qualityScore,
-      feedback,
-      improvements,
-      status
-    } = parsed;
+    const { disease, cause, severity, treatment, prevention, medicines, urgency } = parsed;
 
     // Save to database
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!);
 
     const { error: dbError } = await supabase
-      .from("ideas")
-      .update({
-        ai_clarity: clarity,
-        ai_feasibility: feasibility,
-        ai_originality: originality,
-        ai_impact: impact,
-        ai_quality_score: qualityScore,
-        ai_feedback: feedback,
-        status: status
-      })
-      .eq("id", ideaId);
+      .from("crop_reports")
+      .insert({
+        user_id: userId,
+        crop_type: cropType,
+        photo_url: "text-based-diagnosis",
+        ai_disease: disease,
+        ai_cause: cause,
+        ai_treatment: treatment,
+        ai_prevention: prevention,
+        district: district || null
+      });
 
     if (dbError) {
       console.error("DB error:", dbError);
       return new Response(
-        JSON.stringify({ error: "Failed to save idea analysis" }),
+        JSON.stringify({ error: "Failed to save crop report" }),
         { status: 500, headers: { "Content-Type": "application/json" } }
       );
     }
 
     return new Response(
-      JSON.stringify({
-        clarity,
-        feasibility,
-        originality,
-        impact,
-        qualityScore,
-        feedback,
-        improvements,
-        status
-      }),
+      JSON.stringify({ disease, cause, severity, treatment, prevention, medicines, urgency }),
       {
         headers: {
           "Content-Type": "application/json",

@@ -6,42 +6,43 @@ const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-const CV_SYSTEM_PROMPT = `You are an expert CV reviewer for Pakistan Naujawan Party (PNP) platform helping Pakistani youth improve their CVs.
+const SAFE_ROUTE_SYSTEM_PROMPT = `You are a women safety assistant for Pakistan Naujawan Party (PNP) Mahfooz portal.
 
 YOUR JOB:
-Analyze the CV text provided and give a score and detailed feedback in Urdu.
+Based on the start location, end location, time of day, and any harassment reports in the area,
+suggest the safest route and safety tips for women in Pakistan.
 
-SCORING CRITERIA (total 100 points):
-- Structure & Format (20 points): Is it well organized? Clear sections?
-- Contact Information (10 points): Name, phone, email, city present?
-- Education (20 points): Clearly mentioned with dates and grades?
-- Work Experience (20 points): Relevant experience with responsibilities?
-- Skills (15 points): Relevant skills listed clearly?
-- Achievements (15 points): Any measurable achievements mentioned?
+PAKISTANI SAFETY CONTEXT:
+- Busy main roads are generally safer than narrow streets (galiyan)
+- Daytime is safer than nighttime
+- Markets and commercial areas have more people = safer
+- Areas near police stations are safer
+- Well-lit roads are safer at night
+- Public transport stops are generally safe during day
+- Avoid isolated areas especially after sunset
 
-FEEDBACK RULES:
-- Give feedback in simple Urdu that a young Pakistani can understand
-- Be encouraging but honest
-- Give specific actionable suggestions
-- Focus on what Pakistani employers look for
+SAFETY TIPS FOR PAKISTAN:
+- Travel with someone when possible
+- Keep phone charged and emergency contacts ready
+- Use rickshaw/taxi apps (InDrive, Careem) instead of random transport
+- Share live location with trusted contact
+- Trust your instincts — if area feels unsafe, leave
+- Emergency number: 1242 (Women's helpline Pakistan)
+- Police: 15
+- Rescue: 1122
 
 RESPONSE FORMAT:
 Respond in this exact JSON format only, no extra text:
 {
-  "score": 75,
-  "feedback": "overall feedback paragraph in Urdu",
-  "suggestions": [
-    "specific suggestion 1 in Urdu",
-    "specific suggestion 2 in Urdu",
-    "specific suggestion 3 in Urdu"
-  ],
-  "strengths": [
-    "strength 1 in Urdu",
-    "strength 2 in Urdu"
-  ]
+  "safetyScore": 7,
+  "routeAdvice": "route advice in Urdu",
+  "warnings": ["warning 1 in Urdu", "warning 2 in Urdu"],
+  "safetyTips": ["tip 1 in Urdu", "tip 2 in Urdu"],
+  "emergencyNumbers": ["1242 - خواتین ہیلپ لائن", "15 - پولیس", "1122 - ریسکیو"],
+  "bestTimeToTravel": "advice about best time in Urdu"
 }
 
-score must be a number between 0 and 100.`;
+safetyScore must be a number between 1 and 10 (10 = very safe, 1 = very unsafe).`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -54,15 +55,18 @@ serve(async (req) => {
   }
 
   try {
-    const { cvText, userId } = await req.json();
+    const { startLocation, endLocation, timeOfDay, city, userId } = await req.json();
 
     // Validate input
-    if (!cvText || !userId) {
+    if (!startLocation || !endLocation || !userId) {
       return new Response(
-        JSON.stringify({ error: "cvText and userId are required" }),
+        JSON.stringify({ error: "startLocation, endLocation and userId are required" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
+
+    // Get harassment reports from database for context
+    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!);
 
     // Call Groq API
     const response = await fetch(GROQ_API_URL, {
@@ -73,15 +77,20 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
-        max_tokens: 1500,
+        max_tokens: 1000,
         temperature: 0.3,
         messages: [
-          { role: "system", content: CV_SYSTEM_PROMPT },
+          { role: "system", content: SAFE_ROUTE_SYSTEM_PROMPT },
           {
             role: "user",
-            content: `Please analyze this CV and provide score and feedback:
+            content: `A woman in Pakistan needs safety advice for her route:
 
-${cvText}`
+City: ${city || "not specified"}
+Starting from: ${startLocation}
+Going to: ${endLocation}
+Time of travel: ${timeOfDay || "not specified"}
+
+Please provide safety score, route advice and safety tips in Urdu.`
           }
         ],
       }),
@@ -112,31 +121,24 @@ ${cvText}`
       );
     }
 
-    const { score, feedback, suggestions, strengths } = parsed;
-
-    // Save to database
-    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!);
-
-    const { error: dbError } = await supabase
-      .from("cvs")
-      .upsert({
-        user_id: userId,
-        ai_score: score,
-        ai_feedback: feedback,
-        ai_suggestions: suggestions,
-        updated_at: new Date().toISOString()
-      });
-
-    if (dbError) {
-      console.error("DB error:", dbError);
-      return new Response(
-        JSON.stringify({ error: "Failed to save CV analysis" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
-    }
+    const {
+      safetyScore,
+      routeAdvice,
+      warnings,
+      safetyTips,
+      emergencyNumbers,
+      bestTimeToTravel
+    } = parsed;
 
     return new Response(
-      JSON.stringify({ score, feedback, suggestions, strengths }),
+      JSON.stringify({
+        safetyScore,
+        routeAdvice,
+        warnings,
+        safetyTips,
+        emergencyNumbers,
+        bestTimeToTravel
+      }),
       {
         headers: {
           "Content-Type": "application/json",
